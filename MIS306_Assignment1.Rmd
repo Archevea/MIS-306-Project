@@ -1,6 +1,6 @@
 ---
 title: "Assignment 1"
-author: "Batuhan Karaköy / Yunus Emre Işıktan / Berdan Berke Baş / Mert Özdemir"
+author: "Batuhan Karaköy | Yunus Emre Işıktan | Berdan Berke Baş | Mert Özdemir"
 date: "`r Sys.Date()`"
 output: 
   cleanrmd::html_document_clean:
