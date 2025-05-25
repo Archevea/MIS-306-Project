@@ -1,0 +1,495 @@
+---
+title: "MIS 306 Data Analysis | Homework 2"
+author: "Batuhan Karaköy - #3"
+date: "`r Sys.Date()`"
+output: rmdformats::robobook
+---
+
+```{r setup, include=FALSE, error=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Objective
+This project aims to analyze Boeing Company (`BA`) stock data from 2007 to 2025 using statistical and visualization techniques. Daily, weekly, and monthly return patterns were examined, along with comparisons across different periods and explorations of return distributions. Kolmogorov-Smirnov tests were applied to identify statistically significant differences, and various smoothing techniques, including LOESS, Polynomial Regression, and Generalized Additive Models (GAM), were used to highlight trends. Stock performance was visualized to uncover meaningful patterns and market behaviors.
+
+```{r message=FALSE, echo=FALSE}
+library(quantmod)
+library(xts)
+library(lubridate)
+```
+
+```{r echo=FALSE}
+load("djdata.RData")
+```
+
+# Data Transformation 
+## Looking for column names
+```{r}
+colnames(djdata)
+colnames(djdata.df)
+```
+When we look at the column names of the data, we can see there is no uppercase or blank characters. So we don’t have to clean the column names.
+
+## Removing IBM from data & Selecting BA from data 
+```{r}
+symbols <- colnames(djdata)
+symbols
+symbols[-15]
+
+set.seed(20022025)
+sample(symbols[-15], 16)
+
+set.seed(20022025)
+lst <- sample(symbols[-15], 16)
+
+lst[3]
+djdata[,lst[3]]
+
+getSymbols(lst[3])
+```
+From here we see that, according to the set seed our stock is `BA` (Boeing Company).
+
+## Looking for the first and last few observations of data
+```{r}
+head(BA)
+```
+
+```{r}
+tail(BA)
+```
+From head and tail of the data we can confirm that we imported data correctly. 
+
+# Visual Summaries
+## Plot for opening, closing prices, high and low values and the volume
+```{r}
+plot(as.zoo(BA))
+```
+We see that the `BA.Open`, `BA.High`, `BA.Low`, and `BA.Close` graphs display stock prices at different points, with clear volatility and a big drop around 2020. The `BA.Volume` graph highlights trading activity, with noticeable spikes that likely indicate significant events or decisions made by investors. The BA.Adjusted graph shows the adjusted closing prices, which take dividends and stock splits into account, giving a more accurate picture of value.
+
+## Line Chart (2007 - 2025)
+```{r}
+plot(BA[,-5])
+```
+At this line graph we can see that it remains stable until 2016, followed by a sharp rise peaking in 2019. A sudden drop in 2020 that I assume its because of the pandemics. After 2021, the values fluctuate but stabilize at a lower level than the peak.
+
+# Date and Time Analysis in Stock Returns
+## Retrieving Weekday Data with and Without Labels
+```{r}
+# First few days without labelling.
+head(wday(index(BA), label=F))
+
+# First few days with labelling..
+head(wday(index(BA), label=T))
+```
+## Extracting and Converting Weekday Data
+```{r}
+# result is factor object..
+str(head(wday(index(BA), label=T)))
+
+is.factor(head(wday(index(BA), label=T)))
+
+# Get the first few days as character (instead of factor)
+paste(head(wday(index(BA), label=T)))
+```
+
+## Extracting Time-Based Features from Stock Data
+```{r}
+# days of year
+yday(Sys.Date())
+
+yday(index(first(BA["200303"], "1 week")))
+
+# days of quarter
+qday(Sys.Date())
+
+head(qday(index(BA)))
+
+quarter(Sys.Date()) # quarter of the date
+
+# days of month
+head(mday(index(BA)))
+
+# month of first few obs.
+head(month(index(BA)))
+
+# Convert to monthly data using to.monthly() function. Then get the first few months
+head(month(index(to.monthly(BA)), label=T))
+
+# Just names only..
+paste(head(month(index(to.monthly(BA)), label=T)))
+```
+
+## Last Weekdays of Months
+```{r}
+# last weekdays of months and of course weekdaysdate
+last_weekday_o_month <- function(dx) {
+  ave( 
+  paste(wday(dx, label=T, abbr=F)), 
+  paste(month(dx, label=T, abbr = F)), 
+  FUN = function(x) tail(x[ !(x %in% c("Saturday","Sunday")) ], 1) 
+  ) 
+}
+
+last_weekdaydate_o_month <- function(dx){
+  ave( 
+    dx, 
+# paste(month(dx, label=T, abbr = F)), 
+    month(dx, label=T),
+    year(dx),
+    FUN = function(x) tail(x[ !(wday(x, label=T, abbr=F) %in% c("Saturday","Sunday")) ], 1) 
+  )
+}  
+
+# Get the last 25 end of months weekdays Adjusted close value..
+Ad(BA[tail(unique(last_weekdaydate_o_month(index(BA))), 15),])
+```
+The price started at (`203.72`) in February 2024 but showed a downward trend over time. After a brief recovery in July 2024 (`190.60`), the stock declined again, reaching (`149.31`) in October. Although there was a slight increase at the end of 2024, the price dropped significantly in early 2025, hitting (`136.59`) in April. This suggests overall instability, with short-term recoveries but a general downward trend.
+
+## Close, Adjusted Close, Day-of-week
+```{r}
+ba <- Ad(BA)
+
+# Get Mondays
+head(ba[wday(index(ba))==2])
+
+# Mondays.. 
+wday(head(ba[wday(index(ba))==2]), label=T)
+
+# Fridays.. 
+wday(head(ba[wday(index(ba))==6]), label=T)
+
+# Get return series (cont. compounding, log(xt/xt-1)=log(xt)-log(xt-1))
+ba.ret <- diff(log(ba))
+
+# Mondays returns..
+head(ba.ret[wday(index(ba.ret))==2])
+
+# Data and return series together..
+head(merge(ba, ba.ret))
+
+# Head of mondays returns with levels.
+head(merge(ba, ba.ret)[wday(merge(ba, ba.ret))==2])
+```
+The data presents Boeing's (`BA`) adjusted stock prices and their percentage changes over time, starting from January 2007. The (`BA.Adjusted`) column shows the stock's adjusted closing prices, while (`BA.Adjusted`).1 represents the percentage change from the previous value.
+
+From the table, we can observe fluctuations in stock prices. For example, on January 9, 2007, the price dropped by -1.06%, but on January 10, 2007, it increased by 1.43%. Similarly, in February 2007, the price first increased, then declined again. These ups and downs indicate short-term volatility in Boeing's stock. The presence of negative values suggests periods of decline, while positive values show recoveries.
+
+# Visual Summaries 
+## Histogram: BA returns
+```{r}
+hist(ba.ret, breaks=100, main="BA's Cont. Comp. Returns", xlab="Returns")
+```
+The distribution is bell-shaped indicating a normal-like distribution. Most returns are clustered near zero. 
+
+## Histogram for mondays returns
+```{r}
+hist(ba.ret[wday(index(ba.ret))==2], breaks=50, main="BA's Monday Cont. Comp. Returns", xlab="Returns")
+```
+We can the same thing here as well. The distribution is bell-shaped indicating a normal-like distribution. Most returns are clustered near zero.
+
+## Histogram for fridays returns
+```{r}
+hist(ba.ret[wday(index(ba.ret))==6], breaks=50, main="BA's Friday Cont. Comp. Returns", xlab="Returns")
+```
+We can see its very similar in this histogram too. The only difference I see is that this histogram has more observations on the negative side. The distribution is bell-shaped indicating a normal-like distribution. Most returns are clustered near zero.
+
+## Empirical Cumulative Distribution of Fridays Return
+```{r}
+plot(ecdf(as.vector(ba.ret[wday(index(ba.ret))==6])), main="Friday ECDF")
+```
+We see that most observations is in the range of -0.5 to 0.5 and close to 0. This is matches with the histogram that we plotted before. We can say it has a normal-like distribution and returns are stable.
+
+## Comparison of Empirical Cumulative Distributions of Monday (red) and Fridays (black) Return
+```{r}
+plot(ecdf(as.vector(ba.ret[wday(index(ba.ret))==6])), main="ECDF Distributions")
+lines(ecdf(as.vector(ba.ret[wday(index(ba.ret))==2])), col="red")
+```
+We can see that Monday and Friday returns are almost same. Most observations is in the range of -0.5 to 0.5 and close to 0. We can say it has a normal-like distribution and returns are stable.
+
+# Mean Returns
+## Mean of the weekday returns
+```{r}
+# What about mean returns of weekdays..
+mean.ret <- cbind(
+mean(ba.ret[wday(index(ba.ret))==2], na.rm=T),
+mean(ba.ret[wday(index(ba.ret))==3], na.rm=T),
+mean(ba.ret[wday(index(ba.ret))==4], na.rm=T),
+mean(ba.ret[wday(index(ba.ret))==5], na.rm=T),
+mean(ba.ret[wday(index(ba.ret))==6], na.rm=T))
+colnames(mean.ret) <- levels(wday(index(ba.ret), label=T))[2:6]
+rownames(mean.ret) <- "Mean Returns"
+
+# Lets see up to 6 digits..
+round(mean.ret, 6)
+```
+Among these values, Thursday stands out with the highest mean return (`0.000247`), while Friday shows the lowest return (`0.000112`). This pattern might indicate that Thursday is generally a more profitable day for investments, while Friday could be associated with lower performance.
+
+# BA Monday Prices Line Chart
+```{r}
+plot(ba[wday(index(ba))==2], main="BA Mondays Prices", ylab="$")
+```
+```{r}
+# zoo type..
+plot(as.zoo(ba[wday(index(ba))==2]), main="BA Mondays Prices", ylab="$", xlab="Date")
+```
+We see that before the 2017 it is increasing in its normal trend. Before 2017 its around 100 dollars. After 2017 prices increase exponentially and rises up to 400 dollars. After 2020 prices declines significantly. After 2021 it is increases around 200 dollars.
+
+# Monthly Series
+```{r}
+# Convert to monthly series
+ba.m <- Ad(to.monthly(BA))
+# Get the return series similar to above
+ba.mret <- diff(log(ba.m))
+# The mean of all montly returns.. (up to 6 digits)
+round(mean(ba.mret, na.rm=T), 6)
+```
+
+```{r}
+# What about the yearly mean returns calculated from monthly returns.. (up to 6 digits).. Seems better than T-Bonds.. Remember utility functions..
+round((1+mean(ba.mret, na.rm=T))^12-1, 6)
+```
+
+```{r}
+# Here is the mean yearly return calculated from data
+round(mean(diff(log(Ad(to.yearly(BA)))), na.rm=T), 6)
+```
+
+```{r}
+# Get some mean return value fo specific months.. 
+head(ba.mret[month(index(ba.mret))==1], na.rm=T)
+```
+In January 2007, there is no available data, but from January 2008, we see a negative value (`-0.050174852`), indicating a decline compared to the previous period. The following year (January 2009) also shows a negative value (`-0.008472528`), but the decline is much smaller, suggesting a possible recovery or stabilization.
+
+A strong positive increase is observed in January 2010 (`0.112906588`), marking a significant improvement. However, the subsequent years show lower, yet still positive returns: January 2011 (`0.062659720`) and January 2012 (`0.011252313`). This indicates a general upward trend, though the growth rate seems to be slowing over time.
+
+```{r}
+# Mean January Returns.. (check your R and OS language for different month labels..)
+mean(ba.mret[month(index(ba.mret))==1], na.rm=T)
+
+# February..
+mean(ba.mret[month(index(ba.mret))==2], na.rm=T)
+```
+
+# BA Monthly Returns Bar Plot (2017 - 2025)
+```{r}
+# All January returns since 2007
+barplot(ba.mret[month(index(ba.mret))==1])
+```
+When we look at this bar plot we can see that there are peaks in 2016 and 2019 indicate growth, while troughs around 2016 and 2022 highlight declines, showing variability over time.
+
+# Statistical Tests
+## Kolmogorov-Smirnov Test
+```{r warning=FALSE}
+# Compare Mondays and Tuesdays..
+ks.test(ba.ret[wday(index(ba.ret))==2], ba.ret[wday(index(ba.ret))==3])
+```
+The test statistic (`D = 0.063855`) represents the maximum difference between the two cumulative distributions. The p-value of (`0.05105`) is close to (`0.05`), suggesting that there is weak evidence against the null hypothesis, but it does not reach conventional significance levels. Therefore, the difference in return distributions between these two days is not statistically significant at the 5% level, although it is marginal.
+
+```{r warning=FALSE}
+# Compare Mondays and Fridays..
+ks.test(ba.ret[wday(index(ba.ret))==2], ba.ret[wday(index(ba.ret))==6])
+```
+The test statistic (`D = 0.049352`) indicates the maximum difference between their cumulative distributions. The p-value of (`0.2286`) is relatively high, suggesting no significant evidence to reject the null hypothesis. This means the return distributions of Monday and Friday are statistically similar, and there is no strong indication of a meaningful difference between them.
+## p-value Matrix
+```{r warning=FALSE}
+# Let's obtain all.. Create 5*5 matrix.. We use only upper-triangle
+# See the structure of ks.test result first..
+p.matr <- matrix(rep(0, 5*5), nrow=5)
+colnames(p.matr) <- rownames(p.matr) <- levels(wday(index(ba.ret), label=T))[2:6]
+
+for (i in 2:6){
+  for (j in i:6){
+    p.matr[i-1,j-1] <- ks.test(as.numeric(ba.ret[wday(index(ba.ret))==i]), as.numeric(ba.ret[wday(index(ba.ret))==j]))$p.value
+  }
+}
+
+# p-vales matrix of  Kolmogorov-Smirnov Tests
+round(p.matr, 3)
+```
+Monday and Tuesday have a strong correlation (`0.997`), meaning their return patterns are quite similar. In contrast, Thursday has a weak relationship with earlier weekdays, especially Monday (`0.057`) and Tuesday (`0.107), suggesting a different return behavior. Friday is completely uncorrelated with Monday through Wednesday, indicating a distinct return distribution.
+
+```{r}
+# Let's obtain all months returns.. Create 12*12 matrix.. We use only upper-triangle
+# See the structure of ks.test result first..
+pm.matr <- matrix(rep(0, 12*12), nrow=12)
+colnames(pm.matr) <- rownames(pm.matr) <- levels(month(index(ba.mret), label=T))
+
+for (i in 1:12){
+  for (j in i:12){
+    pm.matr[i,j] <- ks.test(as.numeric(ba.mret[month(index(ba.mret))==i]), as.numeric(ba.mret[month(index(ba.mret))==j]))$p.value
+  }
+}
+
+# p-vales matrix of  Kolmogorov-Smirnov Tests
+round(pm.matr, 3)
+```
+January, March, and July show strong correlations, suggesting similar return behaviors during these months. February and April also have a high correlation, meaning their return patterns are quite similar. In contrast, August and November display weaker relationships with other months, indicating unique return trends. June and September maintain moderate correlations across multiple months, reflecting some consistency while still showing variations. These results suggest that stock returns may follow seasonal trends, where certain months share similar performance characteristics while others differ significantly.
+
+## Time Series Decomposition
+```{r}
+ba.monthly.adj <- Ad(to.monthly(BA))
+
+ba.ts <- ts(as.numeric(ba.monthly.adj), start = c(2007, 1), frequency = 12)
+
+ba.stl <- stl(ba.ts, s.window = "periodic")
+
+plot(ba.stl)
+```
+The graph presents a time series decomposition, breaking the data into four components: observed data, seasonal pattern, trend, and remainder (residuals). The seasonal component shows a repeating pattern, indicating periodic fluctuations. The trend captures long-term movements, with a steady rise until 2019, followed by a decline. The remainder represents irregular variations, with noticeable spikes around 2020. This analysis helps identify underlying patterns and anomalies in the data.
+
+## Forecasting
+```{r}
+library(forecast)
+library(ggplot2)
+
+ba.ets <- ets(ba.ts)
+autoplot(forecast(ba.ets, h = 12)) +
+  ggtitle("BA Monthly Adjusted Price Forecast")
+
+summary(ba.ets)
+```
+The graph shows Boeing's monthly adjusted stock price with a forecast for the near future. The stock saw steady growth until 2019, followed by a sharp decline in 2020 and fluctuating recovery afterward. The blue-shaded forecast area indicates possible price movements, with uncertainty increasing over time. The stock's future trend remains uncertain, depending on market and economic conditions.
+
+# Smoothing
+## Adjusted Close
+```{r warnings = FALSE, message=FALSE}
+library(zoo)
+library(fpp3)
+library(mgcv)
+
+autoplot(ba) +
+  geom_smooth(method = "loess", span = 0.3, color = "red") +
+  labs(
+    title = "Loess Smoothing: Adjusted Close Prices",
+    x = "Date",
+    y = "Adjusted Close ($)"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.line = element_line(linewidth = 1, colour = "grey80"))
+```
+The black line represents the actual prices, while the red line illustrates the smoothed trend using `Loess` smoothing. The smoothing technique helps reveal the general pattern in stock price movements by reducing short-term fluctuations. The graph shows a sharp rise in prices around 2020, followed by a significant decline and continued variations.
+
+## Volume
+```{r}
+autoplot(BA$BA.Volume) +
+  geom_smooth(method = "loess", span = 0.3, color = "red") +
+  labs(
+    title = "Loess Smoothing: Volume",
+    x = "Date",
+    y = "Volume"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.line = element_line(linewidth = 1, colour = "grey80"))
+```
+
+```{r}
+autoplot(BA$BA.Volume) +
+  geom_smooth(method = "gam", formula = y ~ s(x, bs = "cs"), color = "red") +
+  labs(
+    title = "GAM Smoothing: Volume",
+    x = "Date",
+    y = "Volume"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.line = element_line(linewidth = 1, colour = "grey80"))
+```
+When we look at both `LOESS` and `GAM` smoothing plots, we can see that the `LOESS` captures more details and fluctuations in the data, while `GAM` produces a slightly smoother trend. 
+
+## High Prices
+```{r warnings = FALSE}
+autoplot(BA$BA.High) +
+  geom_smooth(method = "loess", span = 0.3, color = "red") +
+  labs(
+    title = "Loess Smoothing: High Prices",
+    x = "Date",
+    y = "High Price ($)"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.line = element_line(linewidth = 1, colour = "grey80"))
+```
+
+```{r}
+autoplot(BA$BA.High) +
+  geom_smooth(method = "lm", formula = y ~ poly(x, 3), color = "red") +
+  labs(
+    title = "Polynomial Regression Smoothing: High Prices",
+    x = "Date",
+    y = "High Price ($)"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.line = element_line(linewidth = 1, colour = "grey80"))
+```
+When we look at both `LOESS` and `Polynomial Regression` smoothing plots, we can see that the `LOESS` captures more details and fluctuations in the data, while `Polynomial Regression` produces a smoother trend. 
+
+## Low Prices
+```{r warnings = FALSE, message=FALSE}
+library(patchwork)
+
+plot1 <- autoplot(BA$BA.Low) +
+  geom_smooth(method = "loess", span = 0.1, color = "red") +
+  labs(
+    title = "Loess Smoothing (span=0.1): Low Prices",
+    x = "Date",
+    y = "Low Price ($)"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.line = element_line(linewidth = 1, colour = "grey80"))
+
+plot2 <- autoplot(BA$BA.Low) +
+  geom_smooth(method = "loess", span = 0.3, color = "red") +
+  labs(
+    title = "Loess Smoothing (span=0.3): Low Prices",
+    x = "Date",
+    y = "Low Price ($)"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.line = element_line(linewidth = 1, colour = "grey80"))
+
+plot3 <- autoplot(BA$BA.Low) +
+  geom_smooth(method = "loess", span = 0.5, color = "red") +
+  labs(
+    title = "Loess Smoothing (span=0.5): Low Prices",
+    x = "Date",
+    y = "Low Price ($)"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.line = element_line(linewidth = 1, colour = "grey80"))
+
+plot4 <- autoplot(BA$BA.Low) +
+  geom_smooth(method = "loess", span = 0.7, color = "red") +
+  labs(
+    title = "Loess Smoothing (span=0.7): Low Prices",
+    x = "Date",
+    y = "Low Price ($)"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.line = element_line(linewidth = 1, colour = "grey80"))
+
+(plot1 + plot2) / (plot3 + plot4)
+```
+The black lines show the actual low prices, while the red lines represent smoothed data. The graphs demonstrate how different spans of Loess smoothing affect the interpretation of trends. A smaller span, like (`0.1`), captures more details and fluctuations in the data, while a larger span, such as (`0.7`), produces a smoother trend, making it easier to observe the general direction of prices over time.
+
+# Conclusion
+The analysis of Boeing Company (`BA`) stock data from 2007 to 2025 has revealed important trends and patterns in return distributions across different timeframes. Weekly return comparisons demonstrated notable variations, particularly with Thursday showing higher average returns, while Friday exhibited lower performance, suggesting potential weekday effects on market behavior. `Kolmogorov-Smirnov` tests indicated weak or non-significant differences between return distributions for specific days, reinforcing the idea that while some patterns exist, they may not be statistically strong.
+
+In the monthly analysis, correlation values highlighted seasonal influences, with certain months sharing similar return distributions while others diverged. January, March, and July displayed stronger correlations, while August and November appeared to follow distinct patterns, reflecting potential market seasonality. Additionally, smoothing techniques, including `LOESS`, `Polynomial Regression`, and `GAM`, helped reveal long-term trends, showing periods of growth, volatility, and stabilization in BA's stock performance.
+
+**Note:** Some of the interpretations and explanations were refined with the help of GPT.
