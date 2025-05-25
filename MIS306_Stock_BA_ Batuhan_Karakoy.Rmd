@@ -1,0 +1,307 @@
+---
+title: "MIS 306 Data Analysis: Forecasting Homework 1"
+author: "Batuhan Karaköy - #3"
+date: "`r Sys.Date()`"
+output: 
+  cleanrmd::html_document_clean:
+    theme: water
+---
+
+```{r setup, include=FALSE, error=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<h1>Boeing Company Stock Price Series</h1>
+In this assignment I have done some time series analysis for Boeing Company stock prices.
+
+## Intstalling Libraries
+```{r message=FALSE}
+library(quantmod)
+library(xts)
+library(lubridate)
+```
+
+## Loading the Data
+```{r}
+load("djdata.RData")
+```
+
+## Looking for column names
+```{r}
+colnames(djdata)
+colnames(djdata.df)
+```
+
+## Removing IBM from data & Selecting BA from data 
+```{r}
+symbols <- colnames(djdata)
+symbols
+symbols[-15]
+
+set.seed(20022025)
+sample(symbols[-15], 16)
+
+set.seed(20022025)
+lst <- sample(symbols[-15], 16)
+
+lst[3]
+djdata[,lst[3]]
+
+getSymbols(lst[3])
+```
+
+## Looking for the first and last few observations of data
+```{r}
+head(BA)
+```
+
+```{r}
+tail(BA)
+```
+
+## Plot for opening, closing prices, high and low values and the volume
+```{r}
+plot(as.zoo(BA))
+```
+We see that the BA.Open, BA.High, BA.Low, and BA.Close graphs display stock prices at different points, with clear volatility and a big drop around 2020. The BA.Volume graph highlights trading activity, with noticeable spikes that likely indicate significant events or decisions made by investors. The BA.Adjusted graph shows the adjusted closing prices, which take dividends and stock splits into account, giving a more accurate picture of value.
+
+## Line Chart (2007 - 2025)
+```{r}
+plot(BA[,-5])
+```
+When we look at this line graph we can see that it remains stable until 2016, followed by a sharp rise peaking in 2019. A sudden drop in 2020 that I assume its because of the pandemics. After 2021, the values fluctuate but stabilize at a lower level than the peak.
+
+## Financial Data
+```{r}
+# First few days without labelling.
+head(wday(index(BA), label=F))
+
+# First few days with labelling..
+head(wday(index(BA), label=T))
+```
+
+```{r}
+# result is factor object..
+str(head(wday(index(BA), label=T)))
+
+is.factor(head(wday(index(BA), label=T)))
+
+# Get the first few days as character (instead of factor)
+paste(head(wday(index(BA), label=T)))
+```
+
+```{r}
+# days of year
+yday(Sys.Date())
+
+yday(index(first(BA["200303"], "1 week")))
+
+# days of quarter
+qday(Sys.Date())
+
+head(qday(index(BA)))
+
+quarter(Sys.Date()) # quarter of the date
+
+# days of month
+head(mday(index(BA)))
+
+# month of first few obs.
+head(month(index(BA)))
+
+# Convert to monthly data using to.monthly() function. Then get the first few months
+head(month(index(to.monthly(BA)), label=T))
+
+# Just names only..
+paste(head(month(index(to.monthly(BA)), label=T)))
+```
+
+```{r}
+# last weekdays of months and of course weekdaysdate
+last_weekday_o_month <- function(dx) {
+  ave( 
+  paste(wday(dx, label=T, abbr=F)), 
+  paste(month(dx, label=T, abbr = F)), 
+  FUN = function(x) tail(x[ !(x %in% c("Saturday","Sunday")) ], 1) 
+  ) 
+}
+
+last_weekdaydate_o_month <- function(dx){
+  ave( 
+    dx, 
+#     paste(month(dx, label=T, abbr = F)), 
+    month(dx, label=T),
+    year(dx),
+    FUN = function(x) tail(x[ !(wday(x, label=T, abbr=F) %in% c("Saturday","Sunday")) ], 1) 
+  )
+}  
+
+# Get the last 25 end of months weekdays Adjusted close value..
+
+Ad(BA[tail(unique(last_weekdaydate_o_month(index(BA))), 15),])
+```
+## Close, Adjusted Close, Day-of-week
+```{r}
+ba <- Ad(BA)
+
+# Get Mondays
+head(ba[wday(index(ba))==2])
+
+# Mondays.. 
+wday(head(ba[wday(index(ba))==2]), label=T)
+
+# Fridays.. 
+wday(head(ba[wday(index(ba))==6]), label=T)
+
+# Get return series (cont. compounding, log(xt/xt-1)=log(xt)-log(xt-1))
+ba.ret <- diff(log(ba))
+
+# Mondays returns..
+head(ba.ret[wday(index(ba.ret))==2])
+
+# Data and return series together..
+head(merge(ba, ba.ret))
+
+# Head of mondays returns with levels.
+head(merge(ba, ba.ret)[wday(merge(ba, ba.ret))==2])
+```
+
+## Histogram: BA returns
+```{r}
+hist(ba.ret, breaks=100, main="BA's Cont. Comp. Returns", xlab="Returns")
+```
+The distribution is bell-shaped indicating a normal-like distribution. Most returns are clustered near zero. 
+
+## Histogram for mondays returns
+```{r}
+hist(ba.ret[wday(index(ba.ret))==2], breaks=50, main="BA's Monday Cont. Comp. Returns", xlab="Returns")
+```
+We can the same thing here as well. The distribution is bell-shaped indicating a normal-like distribution. Most returns are clustered near zero.
+
+## Histogram for fridays returns
+```{r}
+hist(ba.ret[wday(index(ba.ret))==6], breaks=50, main="BA's Friday Cont. Comp. Returns", xlab="Returns")
+```
+We can see its very similar in this histogram too. The only difference I see is that this histogram has more observations on the negative side. The distribution is bell-shaped indicating a normal-like distribution. Most returns are clustered near zero.
+
+## Empirical Cumulative Distribution of Fridays Return
+```{r}
+plot(ecdf(as.vector(ba.ret[wday(index(ba.ret))==6])), main="Friday ECDF")
+```
+We see that most observations is in the range of -0.5 to 0.5 and close to 0. This is matches with the histogram that we plotted before. We can say it has a normal-like distribution and returns are stable.
+
+## Comparison of Empirical Cumulative Distributions of Monday (red) and Fridays (black) Return
+```{r}
+plot(ecdf(as.vector(ba.ret[wday(index(ba.ret))==6])), main="ECDF Distributions")
+lines(ecdf(as.vector(ba.ret[wday(index(ba.ret))==2])), col="red")
+```
+We can see that Monday and Friday returns are almost same. Most observations is in the range of -0.5 to 0.5 and close to 0. We can say it has a normal-like distribution and returns are stable.
+
+## Mean of the weekday returns
+```{r}
+# What about mean returns of weekdays..
+mean.ret <- cbind(
+mean(ba.ret[wday(index(ba.ret))==2], na.rm=T),
+mean(ba.ret[wday(index(ba.ret))==3], na.rm=T),
+mean(ba.ret[wday(index(ba.ret))==4], na.rm=T),
+mean(ba.ret[wday(index(ba.ret))==5], na.rm=T),
+mean(ba.ret[wday(index(ba.ret))==6], na.rm=T))
+colnames(mean.ret) <- levels(wday(index(ba.ret), label=T))[2:6]
+rownames(mean.ret) <- "Mean Returns"
+
+# Lets see up to 6 digits..
+round(mean.ret, 6)
+```
+
+## BA Monday Prices Line Chart
+```{r}
+plot(ba[wday(index(ba))==2], main="BA Mondays Prices", ylab="$")
+```
+```{r}
+# zoo type..
+plot(as.zoo(ba[wday(index(ba))==2]), main="BA Mondays Prices", ylab="$", xlab="Date")
+```
+We see that before the 2017 it is increasing in its normal trend. Before 2017 its around 100 dollars. After 2017 prices increase exponentially and rises up to 400 dollars. After 2020 prices declines significantly. After 2021 it is increases around 200 dollars.
+
+## Monthly Series
+```{r}
+# Convert to monthly series
+ba.m <- Ad(to.monthly(BA))
+# Get the return series similar to above
+ba.mret <- diff(log(ba.m))
+# The mean of all montly returns.. (up to 6 digits)
+round(mean(ba.mret, na.rm=T), 6)
+```
+
+```{r}
+# What about the yearly mean returns calculated from monthly returns.. (up to 6 digits).. Seems better than T-Bonds.. Remember utility functions..
+round((1+mean(ba.mret, na.rm=T))^12-1, 6)
+```
+
+```{r}
+# Here is the mean yearly return calculated from data
+round(mean(diff(log(Ad(to.yearly(BA)))), na.rm=T), 6)
+```
+
+```{r}
+# Get some mean return value fo specific months.. 
+head(ba.mret[month(index(ba.mret))==1], na.rm=T)
+```
+
+```{r}
+# Mean January Returns.. (check your R and OS language for different month labels..)
+mean(ba.mret[month(index(ba.mret))==1], na.rm=T)
+
+# February..
+mean(ba.mret[month(index(ba.mret))==2], na.rm=T)
+```
+
+## BA Monthly Returns Bar Plot (2017 - 2025)
+```{r}
+# All January returns since 2007
+barplot(ba.mret[month(index(ba.mret))==1])
+```
+When we look at this bar plot we can see that there are peaks in 2016 and 2019 indicate growth, while troughs around 2016 and 2022 highlight declines, showing variability over time.
+
+## Comparing Return Distribution
+```{r warning=FALSE}
+# Compare Mondays and Tuesdays..
+ks.test(ba.ret[wday(index(ba.ret))==2], ba.ret[wday(index(ba.ret))==3])
+```
+
+```{r warning=FALSE}
+# Compare Mondays and Fridays..
+ks.test(ba.ret[wday(index(ba.ret))==2], ba.ret[wday(index(ba.ret))==6])
+```
+
+```{r warning=FALSE}
+# Let's obtain all.. Create 5*5 matrix.. We use only upper-triangle
+# See the structure of ks.test result first..
+p.matr <- matrix(rep(0, 5*5), nrow=5)
+colnames(p.matr) <- rownames(p.matr) <- levels(wday(index(ba.ret), label=T))[2:6]
+
+for (i in 2:6){
+  for (j in i:6){
+    p.matr[i-1,j-1] <- ks.test(as.numeric(ba.ret[wday(index(ba.ret))==i]), as.numeric(ba.ret[wday(index(ba.ret))==j]))$p.value
+  }
+}
+
+# p-vales matrix of  Kolmogorov-Smirnov Tests
+round(p.matr, 3)
+```
+
+```{r}
+# Let's obtain all months returns.. Create 12*12 matrix.. We use only upper-triangle
+# See the structure of ks.test result first..
+pm.matr <- matrix(rep(0, 12*12), nrow=12)
+colnames(pm.matr) <- rownames(pm.matr) <- levels(month(index(ba.mret), label=T))
+
+for (i in 1:12){
+  for (j in i:12){
+    pm.matr[i,j] <- ks.test(as.numeric(ba.mret[month(index(ba.mret))==i]), as.numeric(ba.mret[month(index(ba.mret))==j]))$p.value
+  }
+}
+
+# p-vales matrix of  Kolmogorov-Smirnov Tests
+round(pm.matr, 3)
+```
